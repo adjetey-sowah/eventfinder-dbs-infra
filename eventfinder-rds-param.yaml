@@ -1,0 +1,6 @@
+template-file-path: eventfinder-rds-template.yaml
+parameters:
+  AllowedCIDR: 0.0.0.0/0
+  DBPassword: '****'
+  DBUsername: postgres
+tags: {}
