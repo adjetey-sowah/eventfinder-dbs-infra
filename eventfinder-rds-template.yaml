@@ -1,0 +1,87 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: |
+  CloudFormation template for provisioning an RDS PostgreSQL database  with credentials passed in as parameters
+
+Parameters:
+  AllowedCIDR:
+    Type: String
+    Description: CIDR block to allow external database connections from
+    Default: 0.0.0.0/0 # Consider restricting this to your specific IP
+
+  DBUsername:
+    Type: String
+    Description: The master username for the RDS PostgreSQL instance
+    Default: postgres
+
+  DBPassword:
+    Type: String
+    NoEcho: true
+    Description: The master password for the RDS PostgreSQL instance
+
+Resources:
+  # DB Subnet Group
+  DBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Subnet group for RDS PostgreSQL
+      SubnetIds:
+        - !ImportValue EventFinder-VPC-PrivateSubnet1
+        - !ImportValue EventFinder-VPC-PrivateSubnet2
+
+  # Security Group for RDS - Modified to allow external connections
+  DBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId: !ImportValue EventFinder-VPC-VPCID
+      GroupDescription: Security group for RDS PostgreSQL
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          SourceSecurityGroupId: !ImportValue EventFinder-VPC-ECSSecurityGroup
+        # Added rule for external access
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          CidrIp: !Ref AllowedCIDR
+          Description: Allow external PostgreSQL connections
+
+  # RDS PostgreSQL Instance - Using passed-in credentials
+  PostgreSQLDB:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      Engine: postgres
+      EngineVersion: '17.2'
+      DBInstanceClass: db.t3.small
+      AllocatedStorage: 20
+      StorageType: gp2
+      MultiAZ: false
+      DBName: eventfinder
+      MasterUsername: !Ref DBUsername
+      MasterUserPassword: !Ref DBPassword
+      DBSubnetGroupName: !Ref DBSubnetGroup
+      VPCSecurityGroups:
+        - !Ref DBSecurityGroup
+      BackupRetentionPeriod: 7
+      DeleteAutomatedBackups: false
+      DeletionProtection: false
+      PubliclyAccessible: true
+      StorageEncrypted: true
+      EnableIAMDatabaseAuthentication: false
+      Port: 5432
+      Tags:
+        - Key: Environment
+          Value: Production
+
+Outputs:
+  DatabaseEndpoint:
+    Description: PostgreSQL Database Endpoint
+    Value: !GetAtt PostgreSQLDB.Endpoint.Address
+    Export:
+      Name: PostgreSQLEndpoint
+
+  DatabasePort:
+    Description: PostgreSQL Database Port
+    Value: !GetAtt PostgreSQLDB.Endpoint.Port
+    Export:
+      Name: PostgreSQLPort
